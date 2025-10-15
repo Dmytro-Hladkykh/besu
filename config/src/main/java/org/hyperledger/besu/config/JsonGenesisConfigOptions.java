@@ -55,6 +55,7 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   private static final String DEPOSIT_CONTRACT_ADDRESS_KEY = "depositcontractaddress";
   private static final String CONSOLIDATION_REQUEST_CONTRACT_ADDRESS_KEY =
       "consolidationrequestcontractaddress";
+  private static final String NATIVE_MINT_ADDRESS_KEY = "nativemintaddress";
 
   private final ObjectNode configRoot;
   private final Map<String, String> configOverrides = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
@@ -504,6 +505,12 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
+  public Optional<Address> getNativeMintAddress() {
+    Optional<String> inputAddress = JsonUtil.getString(configRoot, NATIVE_MINT_ADDRESS_KEY);
+    return inputAddress.map(Address::fromHexString);
+  }
+
+  @Override
   public Map<String, Object> asMap() {
     final ImmutableMap.Builder<String, Object> builder = ImmutableMap.builder();
     getChainId().ifPresent(chainId -> builder.put("chainId", chainId));
@@ -561,6 +568,7 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
     getDepositContractAddress().ifPresent(l -> builder.put("depositContractAddress", l));
     getConsolidationRequestContractAddress()
         .ifPresent(l -> builder.put("consolidationRequestContractAddress", l));
+    getNativeMintAddress().ifPresent(l -> builder.put("nativeMintAddress", l));
 
     if (isClique()) {
       builder.put("clique", getCliqueConfigOptions().asMap());
