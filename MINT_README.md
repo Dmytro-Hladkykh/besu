@@ -94,7 +94,7 @@ contract MintEventEmitter {
 
 ## Genesis Configuration
 
-To enable native minting, add the `nativemintaddress` field to genesis configuration:
+To enable native minting, add the `nativeMintAddress` field to genesis configuration:
 
 ```json
 {
@@ -110,7 +110,7 @@ To enable native minting, add the `nativemintaddress` field to genesis configura
     "istanbulBlock": 0,
     "berlinBlock": 0,
     "londonBlock": 0,
-    "nativemintaddress": "0x1234567890123456789012345678901234567890"
+    "nativeMintAddress": "0x1234567890123456789012345678901234567890"
   },
   "nonce": "0x0",
   "timestamp": "0x0",
@@ -125,6 +125,6 @@ To enable native minting, add the `nativemintaddress` field to genesis configura
 
 ### Configuration Options
 
-- **`nativemintaddress`** (optional): The address of the contract authorized to emit mint events
+- **`nativeMintAddress`** (optional): The address of the contract authorized to emit mint events
   - If not specified, native minting is disabled
   - Only events from this exact address will be processed
