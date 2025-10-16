@@ -565,7 +565,8 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
 
     getWithdrawalRequestContractAddress()
         .ifPresent(l -> builder.put("withdrawalRequestContractAddress", l));
-    getDepositContractAddress().ifPresent(l -> builder.put("depositContractAddress", l));
+    getDepositContractAddress()
+        .ifPresent(l -> builder.put("depositContractAddress", l));
     getConsolidationRequestContractAddress()
         .ifPresent(l -> builder.put("consolidationRequestContractAddress", l));
     getNativeMintAddress().ifPresent(l -> builder.put("nativeMintAddress", l));
