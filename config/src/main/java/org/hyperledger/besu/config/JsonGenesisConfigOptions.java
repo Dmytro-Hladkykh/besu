@@ -569,7 +569,8 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
         .ifPresent(l -> builder.put("depositContractAddress", l));
     getConsolidationRequestContractAddress()
         .ifPresent(l -> builder.put("consolidationRequestContractAddress", l));
-    getNativeMintAddress().ifPresent(l -> builder.put("nativeMintAddress", l));
+    getNativeMintAddress()
+        .ifPresent(l -> builder.put("nativeMintAddress", l));
 
     if (isClique()) {
       builder.put("clique", getCliqueConfigOptions().asMap());
