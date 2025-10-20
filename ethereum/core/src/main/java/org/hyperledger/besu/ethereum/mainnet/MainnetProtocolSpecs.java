@@ -554,7 +554,8 @@ public abstract class MainnetProtocolSpecs {
                 messageCallProcessor) -> {
                 // Extract builder to intermediate variable to allow conditional configuration
                 // via Optional.ifPresent() for genesis-configured processors
-                var builder = MainnetTransactionProcessor.builder()
+                final MainnetTransactionProcessor.Builder builder =
+                    MainnetTransactionProcessor.builder()
                     .gasCalculator(gasCalculator)
                     .transactionValidatorFactory(transactionValidatorFactory)
                     .contractCreationProcessor(contractCreationProcessor)
@@ -700,7 +701,8 @@ public abstract class MainnetProtocolSpecs {
                 messageCallProcessor) -> {
                 // Extract builder to intermediate variable to allow conditional configuration
                 // via Optional.ifPresent() for genesis-configured processors
-                var builder = MainnetTransactionProcessor.builder()
+                final MainnetTransactionProcessor.Builder builder =
+                    MainnetTransactionProcessor.builder()
                     .gasCalculator(gasCalculator)
                     .transactionValidatorFactory(transactionValidatorFactory)
                     .contractCreationProcessor(contractCreationProcessor)
@@ -795,7 +797,8 @@ public abstract class MainnetProtocolSpecs {
                 messageCallProcessor) -> {
                 // Extract builder to intermediate variable to allow conditional configuration
                 // via Optional.ifPresent() for genesis-configured processors
-                var builder = MainnetTransactionProcessor.builder()
+                final MainnetTransactionProcessor.Builder builder =
+                    MainnetTransactionProcessor.builder()
                     .gasCalculator(gasCalculator)
                     .transactionValidatorFactory(transactionValidator)
                     .contractCreationProcessor(contractCreationProcessor)
@@ -914,7 +917,8 @@ public abstract class MainnetProtocolSpecs {
                     transactionValidator,
                     contractCreationProcessor,
                     messageCallProcessor) -> {
-                    var builder = MainnetTransactionProcessor.builder()
+                    final MainnetTransactionProcessor.Builder builder =
+                        MainnetTransactionProcessor.builder()
                         .gasCalculator(gasCalculator)
                         .transactionValidatorFactory(transactionValidator)
                         .contractCreationProcessor(contractCreationProcessor)
