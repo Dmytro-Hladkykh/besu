@@ -176,6 +176,10 @@ public class NativeMintEventProcessor {
       final Address recipient, final Wei amount, final WorldUpdater worldUpdater) {
 
     // Get or create the recipient account
+    // WARNING: Creating new accounts consumes computational resources (~25k gas)
+    // The cost is NOT charged to transaction gas as minting occurs after execution completes
+    // Ensure the mint contract implements proper limiting and access controls
+    // to prevent resource exhaustion attacks via excessive account creation
     final MutableAccount account = worldUpdater.getOrCreate(recipient);
 
     // Get current balance for logging
