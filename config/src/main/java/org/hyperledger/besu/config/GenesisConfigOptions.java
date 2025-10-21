@@ -595,4 +595,11 @@ public interface GenesisConfigOptions {
    * @return the blob schedule
    */
   Optional<BlobScheduleOptions> getBlobScheduleOptions();
+
+  /**
+   * The native mint contract address
+   *
+   * @return the native mint contract address
+   */
+  Optional<Address> getNativeMintAddress();
 }

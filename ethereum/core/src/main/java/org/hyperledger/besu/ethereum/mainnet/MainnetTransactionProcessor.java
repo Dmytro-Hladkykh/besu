@@ -85,6 +85,8 @@ public class MainnetTransactionProcessor {
 
   private final Optional<CodeDelegationProcessor> maybeCodeDelegationProcessor;
 
+  private final Optional<NativeMintEventProcessor> maybeNativeMintEventProcessor;
+
   private MainnetTransactionProcessor(
       final GasCalculator gasCalculator,
       final TransactionValidatorFactory transactionValidatorFactory,
@@ -95,7 +97,8 @@ public class MainnetTransactionProcessor {
       final int maxStackSize,
       final FeeMarket feeMarket,
       final CoinbaseFeePriceCalculator coinbaseFeePriceCalculator,
-      final CodeDelegationProcessor maybeCodeDelegationProcessor) {
+      final CodeDelegationProcessor maybeCodeDelegationProcessor,
+      final NativeMintEventProcessor maybeNativeMintEventProcessor) {
     this.gasCalculator = gasCalculator;
     this.transactionValidatorFactory = transactionValidatorFactory;
     this.contractCreationProcessor = contractCreationProcessor;
@@ -106,6 +109,7 @@ public class MainnetTransactionProcessor {
     this.feeMarket = feeMarket;
     this.coinbaseFeePriceCalculator = coinbaseFeePriceCalculator;
     this.maybeCodeDelegationProcessor = Optional.ofNullable(maybeCodeDelegationProcessor);
+    this.maybeNativeMintEventProcessor = Optional.ofNullable(maybeNativeMintEventProcessor);
   }
 
   /**
@@ -389,6 +393,18 @@ public class MainnetTransactionProcessor {
       }
 
       if (initialFrame.getState() == MessageFrame.State.COMPLETED_SUCCESS) {
+        // Process native mint events BEFORE committing the world state
+        // This allows the mint processor to modify balances as part of this transaction
+        maybeNativeMintEventProcessor.ifPresent(
+            processor -> {
+              try {
+                processor.processLogs(initialFrame.getLogs(), worldUpdater);
+              } catch (final Exception e) {
+                LOG.error("Error processing native mint events for transaction {}", transaction.getHash(), e);
+                // Continue with transaction - mint processing errors should not fail the transaction
+              }
+            });
+
         worldUpdater.commit();
       } else {
         if (initialFrame.getExceptionalHaltReason().isPresent()
@@ -632,6 +648,7 @@ public class MainnetTransactionProcessor {
     private FeeMarket feeMarket;
     private CoinbaseFeePriceCalculator coinbaseFeePriceCalculator;
     private CodeDelegationProcessor codeDelegationProcessor;
+    private NativeMintEventProcessor nativeMintEventProcessor;
 
     public Builder gasCalculator(final GasCalculator gasCalculator) {
       this.gasCalculator = gasCalculator;
@@ -687,6 +704,12 @@ public class MainnetTransactionProcessor {
       return this;
     }
 
+    public Builder nativeMintEventProcessor(
+        final NativeMintEventProcessor nativeMintEventProcessor) {
+      this.nativeMintEventProcessor = nativeMintEventProcessor;
+      return this;
+    }
+
     public Builder populateFrom(final MainnetTransactionProcessor processor) {
       this.gasCalculator = processor.gasCalculator;
       this.transactionValidatorFactory = processor.transactionValidatorFactory;
@@ -698,6 +721,7 @@ public class MainnetTransactionProcessor {
       this.feeMarket = processor.feeMarket;
       this.coinbaseFeePriceCalculator = processor.coinbaseFeePriceCalculator;
       this.codeDelegationProcessor = processor.maybeCodeDelegationProcessor.orElse(null);
+      this.nativeMintEventProcessor = processor.maybeNativeMintEventProcessor.orElse(null);
       return this;
     }
 
@@ -712,7 +736,8 @@ public class MainnetTransactionProcessor {
           maxStackSize,
           feeMarket,
           coinbaseFeePriceCalculator,
-          codeDelegationProcessor);
+          codeDelegationProcessor,
+          nativeMintEventProcessor);
     }
   }
 }

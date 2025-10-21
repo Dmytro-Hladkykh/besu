@@ -551,8 +551,11 @@ public abstract class MainnetProtocolSpecs {
                 feeMarket,
                 transactionValidatorFactory,
                 contractCreationProcessor,
-                messageCallProcessor) ->
-                MainnetTransactionProcessor.builder()
+                messageCallProcessor) -> {
+                // Extract builder to intermediate variable to allow conditional configuration
+                // via Optional.ifPresent() for genesis-configured processors
+                final MainnetTransactionProcessor.Builder builder =
+                    MainnetTransactionProcessor.builder()
                     .gasCalculator(gasCalculator)
                     .transactionValidatorFactory(transactionValidatorFactory)
                     .contractCreationProcessor(contractCreationProcessor)
@@ -561,8 +564,11 @@ public abstract class MainnetProtocolSpecs {
                     .warmCoinbase(false)
                     .maxStackSize(evmConfiguration.evmStackSize())
                     .feeMarket(feeMarket)
-                    .coinbaseFeePriceCalculator(CoinbaseFeePriceCalculator.eip1559())
-                    .build())
+                    .coinbaseFeePriceCalculator(CoinbaseFeePriceCalculator.eip1559());
+                createNativeMintEventProcessor(genesisConfigOptions)
+                    .ifPresent(builder::nativeMintEventProcessor);
+                return builder.build();
+            })
         .contractCreationProcessorBuilder(
             evm ->
                 new ContractCreationProcessor(
@@ -692,8 +698,11 @@ public abstract class MainnetProtocolSpecs {
                 feeMarket,
                 transactionValidatorFactory,
                 contractCreationProcessor,
-                messageCallProcessor) ->
-                MainnetTransactionProcessor.builder()
+                messageCallProcessor) -> {
+                // Extract builder to intermediate variable to allow conditional configuration
+                // via Optional.ifPresent() for genesis-configured processors
+                final MainnetTransactionProcessor.Builder builder =
+                    MainnetTransactionProcessor.builder()
                     .gasCalculator(gasCalculator)
                     .transactionValidatorFactory(transactionValidatorFactory)
                     .contractCreationProcessor(contractCreationProcessor)
@@ -702,8 +711,11 @@ public abstract class MainnetProtocolSpecs {
                     .warmCoinbase(true)
                     .maxStackSize(evmConfiguration.evmStackSize())
                     .feeMarket(feeMarket)
-                    .coinbaseFeePriceCalculator(CoinbaseFeePriceCalculator.eip1559())
-                    .build())
+                    .coinbaseFeePriceCalculator(CoinbaseFeePriceCalculator.eip1559());
+                createNativeMintEventProcessor(genesisConfigOptions)
+                    .ifPresent(builder::nativeMintEventProcessor);
+                return builder.build();
+            })
         // Contract creation rules for EIP-3860 Limit and meter intitcode
         .transactionValidatorFactoryBuilder(
             (evm, gasLimitCalculator, feeMarket) ->
@@ -782,8 +794,11 @@ public abstract class MainnetProtocolSpecs {
                 feeMarket,
                 transactionValidator,
                 contractCreationProcessor,
-                messageCallProcessor) ->
-                MainnetTransactionProcessor.builder()
+                messageCallProcessor) -> {
+                // Extract builder to intermediate variable to allow conditional configuration
+                // via Optional.ifPresent() for genesis-configured processors
+                final MainnetTransactionProcessor.Builder builder =
+                    MainnetTransactionProcessor.builder()
                     .gasCalculator(gasCalculator)
                     .transactionValidatorFactory(transactionValidator)
                     .contractCreationProcessor(contractCreationProcessor)
@@ -792,8 +807,11 @@ public abstract class MainnetProtocolSpecs {
                     .warmCoinbase(true)
                     .maxStackSize(evmConfiguration.evmStackSize())
                     .feeMarket(feeMarket)
-                    .coinbaseFeePriceCalculator(CoinbaseFeePriceCalculator.eip1559())
-                    .build())
+                    .coinbaseFeePriceCalculator(CoinbaseFeePriceCalculator.eip1559());
+                createNativeMintEventProcessor(genesisConfigOptions)
+                    .ifPresent(builder::nativeMintEventProcessor);
+                return builder.build();
+            })
         // change to check for max blob gas per block for EIP-4844
         .transactionValidatorFactoryBuilder(
             (evm, gasLimitCalculator, feeMarket) ->
@@ -898,8 +916,9 @@ public abstract class MainnetProtocolSpecs {
                     feeMarket,
                     transactionValidator,
                     contractCreationProcessor,
-                    messageCallProcessor) ->
-                    MainnetTransactionProcessor.builder()
+                    messageCallProcessor) -> {
+                    final MainnetTransactionProcessor.Builder builder =
+                        MainnetTransactionProcessor.builder()
                         .gasCalculator(gasCalculator)
                         .transactionValidatorFactory(transactionValidator)
                         .contractCreationProcessor(contractCreationProcessor)
@@ -913,8 +932,11 @@ public abstract class MainnetProtocolSpecs {
                             new CodeDelegationProcessor(
                                 chainId,
                                 SIGNATURE_ALGORITHM.get().getHalfCurveOrder(),
-                                new CodeDelegationService()))
-                        .build())
+                                new CodeDelegationService()));
+                    createNativeMintEventProcessor(genesisConfigOptions)
+                        .ifPresent(builder::nativeMintEventProcessor);
+                    return builder.build();
+                })
             // EIP-2935 Blockhash processor
             .preExecutionProcessor(new PraguePreExecutionProcessor())
             .hardforkId(PRAGUE);
@@ -1337,5 +1359,22 @@ public abstract class MainnetProtocolSpecs {
       return blobSchedule -> FeeMarket.fixedBaseFee(londonForkBlockNumber, minTransactionGasPrice);
     }
     return feeMarketBuilder;
+  }
+
+  /**
+   * Creates a NativeMintEventProcessor if configured in genesis.
+   *
+   * @param genesisConfigOptions the genesis config options
+   * @return Optional containing NativeMintEventProcessor if mint contract address is configured
+   */
+  private static Optional<NativeMintEventProcessor> createNativeMintEventProcessor(
+      final GenesisConfigOptions genesisConfigOptions) {
+    return genesisConfigOptions
+        .getNativeMintAddress()
+        .map(
+            address -> {
+              LOG.info("Native mint event processor enabled for mint contract address: {}", address);
+              return new NativeMintEventProcessor(address);
+            });
   }
 }
