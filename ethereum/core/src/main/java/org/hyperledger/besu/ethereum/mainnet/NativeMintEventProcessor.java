@@ -21,10 +21,8 @@ import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.log.Log;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Optional;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
@@ -37,8 +35,8 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Event signatures:
  * <ul>
- *   <li>MintRequested(address indexed recipient, uint256 amount)
- *   <li>BurnRequested(address indexed from, uint256 amount)
+ *   <li>MintRequested(address indexed recipient, uint256 amount) - mints to recipient
+ *   <li>BurnRequested() - burns entire contract balance
  * </ul>
  */
 public class NativeMintEventProcessor {
@@ -51,14 +49,13 @@ public class NativeMintEventProcessor {
       Hash.hash(Bytes.wrap("MintRequested(address,uint256)".getBytes(StandardCharsets.UTF_8)));
 
   // Event signature hash for BurnRequested event
-  // keccak256("BurnRequested(address,uint256)")
+  // keccak256("BurnRequested()")
   private static final Bytes32 BURN_REQUESTED_EVENT_SIGNATURE =
-      Hash.hash(Bytes.wrap("BurnRequested(address,uint256)".getBytes(StandardCharsets.UTF_8)));
+      Hash.hash(Bytes.wrap("BurnRequested()".getBytes(StandardCharsets.UTF_8)));
 
   private static final int MINT_EVENT_TOPICS_COUNT = 2; // signature + indexed recipient
   private static final int MINT_EVENT_DATA_SIZE = 32;   // uint256 amount
-  private static final int BURN_EVENT_TOPICS_COUNT = 2; // signature + indexed from
-  private static final int BURN_EVENT_DATA_SIZE = 32;   // uint256 amount
+  private static final int BURN_EVENT_TOPICS_COUNT = 1; // signature only
 
   private final Address mintContractAddress;
 
@@ -217,15 +214,14 @@ public class NativeMintEventProcessor {
   /**
    * Process a BurnRequested event and execute the burn.
    *
+   * <p>Burns the entire balance of the mint contract.
+   *
    * @param log the event log
    * @param worldUpdater the world updater
    */
   private void processBurnRequest(final Log log, final WorldUpdater worldUpdater) {
 
-    // Decode event parameters
-    // Topics: [0] = signature, [1] = from (indexed)
-    // Data: amount (32 bytes)
-
+    // BurnRequested() has no parameters, only event signature
     if (log.getTopics().size() != BURN_EVENT_TOPICS_COUNT) {
       LOG.warn(
           "Invalid BurnRequested event: expected {} topics, got {}. Log: {}",
@@ -236,91 +232,51 @@ public class NativeMintEventProcessor {
     }
 
     try {
-      // Extract indexed parameters from topics
-      final Address from = Address.wrap(log.getTopics().get(1).slice(12, 20));
+      LOG.trace("Processing burn request: contract={}", log.getLogger());
 
-      // Extract non-indexed parameters from data
-      final Bytes data = log.getData();
-      if (data.size() != BURN_EVENT_DATA_SIZE) {
-        LOG.warn(
-            "Invalid BurnRequested event data: expected {} bytes, got {}. Log: {}",
-            BURN_EVENT_DATA_SIZE,
-            data.size(),
-            log);
-        return;
-      }
+      // Execute the burn - burns entire contract balance
+      executeBurn(worldUpdater);
 
-      final Wei amount = Wei.wrap(data.slice(0, 32));
-
-      // Validate parameters
-      if (amount.isZero()) {
-        LOG.warn("Invalid burn amount: {}. From: {}", amount, from);
-        return;
-      }
-
-      if (from.equals(Address.ZERO)) {
-        LOG.warn("Invalid from address: zero address");
-        return;
-      }
-
-      LOG.trace(
-          "Processing burn request: from={}, amount={}, contract={}",
-          from,
-          amount,
-          log.getLogger());
-
-      // Execute the burn
-      executeBurn(from, amount, worldUpdater);
-
-      LOG.trace(
-          "Burn executed successfully: from={}, amount={}",
-          from,
-          amount);
+      LOG.trace("Burn executed successfully");
 
     } catch (final Exception e) {
-      LOG.error("Error decoding or executing burn request from log: {}", log, e);
+      LOG.error("Error executing burn request from log: {}", log, e);
     }
   }
 
   /**
    * Execute the actual burn operation by modifying the world state.
    *
-   * @param from the account to burn from
-   * @param amount the amount to burn
+   * <p>Burns the entire balance of the mint contract by setting it to zero.
+   *
    * @param worldUpdater the world updater
    */
-  private void executeBurn(
-      final Address from, final Wei amount, final WorldUpdater worldUpdater) {
+  private void executeBurn(final WorldUpdater worldUpdater) {
 
-    // Get the account (if it doesn't exist, there's nothing to burn)
-    final MutableAccount account = worldUpdater.getAccount(from);
+    // Get the contract account
+    final MutableAccount account = worldUpdater.getAccount(mintContractAddress);
 
     if (account == null) {
-      LOG.warn("Cannot burn from non-existent account: {}", from);
+      LOG.warn("Cannot burn from non-existent contract account: {}", mintContractAddress);
       return;
     }
 
-    // Get current balance for logging
+    // Get current balance
     final Wei currentBalance = account.getBalance();
 
-    try {
-      // Decrement balance (uses subtract internally, will throw IllegalStateException on insufficient balance)
-      account.decrementBalance(amount);
-
-      LOG.trace(
-          "Balance updated for {}: {} - {} = {}",
-          from,
-          currentBalance,
-          amount,
-          account.getBalance());
-    } catch (final IllegalStateException e) {
-      LOG.warn(
-          "Insufficient balance for burn: account={}, balance={}, requested={}. Error: {}",
-          from,
-          currentBalance,
-          amount,
-          e.getMessage());
+    if (currentBalance.isZero()) {
+      LOG.warn("Contract has zero balance, nothing to burn. Contract: {}", mintContractAddress);
+      return;
     }
+
+    // Set balance to zero (burn entire balance)
+    account.setBalance(Wei.ZERO);
+
+    LOG.trace(
+        "Balance updated for {}: {} burned, new balance = {}",
+        mintContractAddress,
+        currentBalance,
+        Wei.ZERO);
   }
 
 }

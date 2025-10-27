@@ -12,7 +12,7 @@ This fork adds the ability for designated smart contracts to mint and burn nativ
 2. **Event Detection**: During transaction processing, the `NativeMintEventProcessor` monitors logs for `MintRequested` and `BurnRequested` events from the configured contract
 3. **Balance Modification**: When a valid event is detected:
    - **Mint**: The recipient's balance is increased by the specified amount
-   - **Burn**: The account's balance is decreased by the specified amount
+   - **Burn**: The **entire balance of the contract itself** is burned (set to zero)
 4. **State Commitment**: The balance changes are committed to the world state along with other transaction effects
 
 ### Processing Flow
@@ -29,10 +29,9 @@ Filter logs by contract address
 Decode MintRequested/BurnRequested events
     ↓
 For MintRequested:           For BurnRequested:
-  - Validate recipient         - Validate from address
-  - Validate amount            - Validate amount
-  - Increment balance          - Check sufficient balance
-                               - Decrement balance
+  - Validate recipient         - Validate contract account exists
+  - Validate amount            - Check contract has non-zero balance
+  - Increment balance          - Set contract balance to zero
     ↓
 World State Commit
 ```
@@ -45,10 +44,10 @@ The minting contract must emit events with the following specification:
 
 ```solidity
 event MintRequested(address indexed recipient, uint256 amount);
-event BurnRequested(address indexed from, uint256 amount);
+event BurnRequested();
 ```
 
-### Event Structure
+### MintRequested Event Structure
 
 - **Event Name**: `MintRequested`
 - **Event Signature Hash**: `keccak256("MintRequested(address,uint256)")`
@@ -60,20 +59,24 @@ event BurnRequested(address indexed from, uint256 amount);
 ### BurnRequested Event Structure
 
 - **Event Name**: `BurnRequested`
-- **Event Signature Hash**: `keccak256("BurnRequested(address,uint256)")`
+- **Event Signature Hash**: `keccak256("BurnRequested()")`
 - **Topics**:
-  - `topics[0]`: Event signature hash
-  - `topics[1]`: From address (indexed, 32 bytes with 12-byte padding)
-- **Data**: Amount to burn (32 bytes, uint256)
+  - `topics[0]`: Event signature hash only
+- **Data**: None
+- **Behavior**: Burns the **entire balance** of the contract itself (not from any user account)
 
 ### Validation Rules
 
-The processor validates:
-1. Event is from the configured mint contract address
-2. Event signature matches `MintRequested(address,uint256)` or `BurnRequested(address,uint256)`
+**For MintRequested:**
+1. Event is from the configured contract address
+2. Event signature matches `MintRequested(address,uint256)`
 3. Amount is greater than zero
-4. Recipient (for `MintRequested`) or From (for `BurnRequested`) is not the zero address (0x0000...0000)
-5. _**Only for `BurnRequested`:**_ From account exists and has sufficient balance
+4. Recipient is not the zero address (0x0000...0000)
+
+**For BurnRequested:**
+1. Event is from the configured contract address
+2. Event signature matches `BurnRequested()`
+3. Contract account exists and has non-zero balance
 
 ### Example Solidity Contract
 
@@ -97,14 +100,9 @@ contract MintEventEmitter {
     );
 
     /**
-     * @notice Event emitted when burn is requested
-     * @param from The address from which tokens will be burned
-     * @param amount The amount of tokens to burn
+     * @notice Event emitted when burn is requested (burns entire contract balance)
      */
-    event BurnRequested(
-        address indexed from,
-        uint256 amount
-    );
+    event BurnRequested();
 
     /**
      * @notice Request a mint operation
@@ -116,12 +114,10 @@ contract MintEventEmitter {
     }
 
     /**
-     * @notice Request a burn operation
-     * @param from_ The address from which tokens will be burned
-     * @param amount_ The amount of tokens to burn
+     * @notice Request a burn operation (burns entire contract balance)
      */
-    function burn(address from_, uint256 amount_) external {
-        emit BurnRequested(from_, amount_);
+    function burn() external {
+        emit BurnRequested();
     }
 }
 ```
@@ -162,3 +158,4 @@ To enable native minting, add the `nativeMintAddress` field to genesis configura
 - **`nativeMintAddress`** (optional): The address of the contract authorized to emit mint and burn events
   - If not specified, native minting and burning are disabled
   - Only events from this exact address will be processed
+  - **Important**: BurnRequested burns the entire balance of this contract address
