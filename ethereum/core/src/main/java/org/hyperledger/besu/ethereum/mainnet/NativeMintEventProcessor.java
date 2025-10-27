@@ -21,10 +21,8 @@ import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.log.Log;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Optional;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
@@ -32,10 +30,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Processes MintRequested events from the Native Mint contract
- * and executes native token mints by modifying account balances.
+ * Processes MintRequested and BurnRequested events from the Native Mint contract
+ * and executes native token mints and burns by modifying account balances.
  *
- * <p>Event signature: MintRequested(address indexed recipient, uint256 amount)
+ * <p>Event signatures:
+ * <ul>
+ *   <li>MintRequested(address indexed recipient, uint256 amount) - mints to recipient
+ *   <li>BurnRequested() - burns entire contract balance
+ * </ul>
  */
 public class NativeMintEventProcessor {
 
@@ -46,8 +48,14 @@ public class NativeMintEventProcessor {
   private static final Bytes32 MINT_REQUESTED_EVENT_SIGNATURE =
       Hash.hash(Bytes.wrap("MintRequested(address,uint256)".getBytes(StandardCharsets.UTF_8)));
 
+  // Event signature hash for BurnRequested event
+  // keccak256("BurnRequested()")
+  private static final Bytes32 BURN_REQUESTED_EVENT_SIGNATURE =
+      Hash.hash(Bytes.wrap("BurnRequested()".getBytes(StandardCharsets.UTF_8)));
+
   private static final int MINT_EVENT_TOPICS_COUNT = 2; // signature + indexed recipient
   private static final int MINT_EVENT_DATA_SIZE = 32;   // uint256 amount
+  private static final int BURN_EVENT_TOPICS_COUNT = 1; // signature only
 
   private final Address mintContractAddress;
 
@@ -62,7 +70,7 @@ public class NativeMintEventProcessor {
   }
 
   /**
-   * Process transaction logs to detect and execute mint requests.
+   * Process transaction logs to detect and execute mint and burn requests.
    *
    * <p>This method should be called after transaction execution, before the final world state
    * commit.
@@ -82,16 +90,23 @@ public class NativeMintEventProcessor {
         continue; // Not from configured contract
       }
 
-      // Check if it's a MintRequested event
-      if (log.getTopics().isEmpty()
-          || !log.getTopics().get(0).equals(MINT_REQUESTED_EVENT_SIGNATURE)) {
-        continue; // Not a MintRequested event
+      if (log.getTopics().isEmpty()) {
+        continue; // No event signature
       }
 
+      final Bytes32 eventSignature = log.getTopics().get(0);
+
       try {
-        processMintRequest(log, worldUpdater);
+        // Check if it's a MintRequested event
+        if (eventSignature.equals(MINT_REQUESTED_EVENT_SIGNATURE)) {
+          processMintRequest(log, worldUpdater);
+        }
+        // Check if it's a BurnRequested event
+        else if (eventSignature.equals(BURN_REQUESTED_EVENT_SIGNATURE)) {
+          processBurnRequest(log, worldUpdater);
+        }
       } catch (final Exception e) {
-        LOG.error("Error processing mint request from log: {}", log, e);
+        LOG.error("Error processing native token event from log: {}", log, e);
         // Continue processing other logs even if one fails
       }
     }
@@ -194,6 +209,74 @@ public class NativeMintEventProcessor {
         currentBalance,
         amount,
         account.getBalance());
+  }
+
+  /**
+   * Process a BurnRequested event and execute the burn.
+   *
+   * <p>Burns the entire balance of the mint contract.
+   *
+   * @param log the event log
+   * @param worldUpdater the world updater
+   */
+  private void processBurnRequest(final Log log, final WorldUpdater worldUpdater) {
+
+    // BurnRequested() has no parameters, only event signature
+    if (log.getTopics().size() != BURN_EVENT_TOPICS_COUNT) {
+      LOG.warn(
+          "Invalid BurnRequested event: expected {} topics, got {}. Log: {}",
+          BURN_EVENT_TOPICS_COUNT,
+          log.getTopics().size(),
+          log);
+      return;
+    }
+
+    try {
+      LOG.trace("Processing burn request: contract={}", log.getLogger());
+
+      // Execute the burn - burns entire contract balance
+      executeBurn(worldUpdater);
+
+      LOG.trace("Burn executed successfully");
+
+    } catch (final Exception e) {
+      LOG.error("Error executing burn request from log: {}", log, e);
+    }
+  }
+
+  /**
+   * Execute the actual burn operation by modifying the world state.
+   *
+   * <p>Burns the entire balance of the mint contract by setting it to zero.
+   *
+   * @param worldUpdater the world updater
+   */
+  private void executeBurn(final WorldUpdater worldUpdater) {
+
+    // Get the contract account
+    final MutableAccount account = worldUpdater.getAccount(mintContractAddress);
+
+    if (account == null) {
+      LOG.warn("Cannot burn from non-existent contract account: {}", mintContractAddress);
+      return;
+    }
+
+    // Get current balance
+    final Wei currentBalance = account.getBalance();
+
+    if (currentBalance.isZero()) {
+      LOG.warn("Contract has zero balance, nothing to burn. Contract: {}", mintContractAddress);
+      return;
+    }
+
+    // Set balance to zero (burn entire balance)
+    account.setBalance(Wei.ZERO);
+
+    LOG.trace(
+        "Balance updated for {}: {} burned, new balance = {}",
+        mintContractAddress,
+        currentBalance,
+        Wei.ZERO);
   }
 
 }
